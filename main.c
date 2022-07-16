@@ -1,7 +1,7 @@
 /*
  * Для компиляции необходимо добавить ключ -lncurses
  * gcc -o snake main.c -lncurses
- 
+
  */
 
 #include <stdio.h>
@@ -41,6 +41,8 @@ struct food {
  Голова змейки содержит в себе
  x,y - координаты текущей позиции
  direction - направление движения
+ level - уровень
+ speed_timeout - значение таймаута для изменения скорости движения
  tsize - размер хвоста
  *tail -  ссылка на хвост
  */
@@ -48,6 +50,8 @@ struct snake {
     int x;
     int y;
     int direction;
+    int level;
+    int speed_timeout;
     size_t tsize;
     struct tail *tail;
 } snake;
@@ -74,7 +78,7 @@ void go(struct snake *head) {
             mvprintw(head->y, ++(head->x), ch);
             break;
         case UP:
-            if(head->y <= 0)
+            if(head->y <= 1)
                 head->y = max_y;
             mvprintw(--(head->y), head->x, ch);
             break;
@@ -129,6 +133,8 @@ void initHead(struct snake *head) {
     head->x = 0;
     head->y = 2;
     head->direction = RIGHT;
+    head->level = 1;
+    head->speed_timeout = 100;
 }
 void initFood(struct food f[], size_t size) {
     struct food init = {0,0,0,0,0};
@@ -171,6 +177,21 @@ void addTail(struct snake *head) {
     }
     head->tsize++;
 }
+
+/*
+ Увеличение значения уровня на 1
+ */
+void addLevel(struct snake *head) {
+    head->level++;
+    if (head->level % 2) //каждый второй уровень скорость будет увеличиваться
+    {
+        if (head->speed_timeout > 10) {
+            head->speed_timeout--;
+            printSpeed();
+        }
+    }
+}
+
 void printHelp(char *s) {
     mvprintw(0, 0, s);
 }
@@ -253,12 +274,19 @@ _Bool haveEat(struct snake *head, struct food f[]) {
 void printLevel(struct snake *head) {
     int max_x=0, max_y=0;
     getmaxyx(stdscr, max_y, max_x);
-    mvprintw(0, max_x-10, "LEVEL: %d", head->tsize);
+    mvprintw(0, max_x-10, "LEVEL: %d", head->level);
 }
+
+void printSpeed(struct snake *head) {
+    int max_x=0, max_y=0;
+    getmaxyx(stdscr, max_y, max_x);
+    mvprintw(0, max_x-30, "SPEED: %d", 101 - head->speed_timeout);
+}
+
 void printExit(struct snake *head) {
     int max_x=0, max_y=0;
     getmaxyx(stdscr, max_y, max_x);
-    mvprintw(max_y/2, max_x/2-5, "Your LEVEL is %d", head->tsize);
+    mvprintw(max_y/2, max_x/2-5, "Your LEVEL is %d", head->level);
 }
 _Bool isCrash(struct snake *head) {
     for(size_t i=1; i<head->tsize; i++)
@@ -274,13 +302,15 @@ int main()
     initFood(food, MAX_FOOD_SIZE);
     initscr();            // Старт curses mod
     keypad(stdscr, TRUE); // Включаем F1, F2, стрелки и т.д.
-    
+
     raw();                // Откдючаем line buffering
     noecho();            // Отключаем echo() режим при вызове getch
     curs_set(FALSE);    //Отключаем курсор
     printHelp("  Use arrows for control. Press 'q' for EXIT");
     putFood(food, SEED_NUMBER);// Кладем зерна
     timeout(0);    //Отключаем таймаут после нажатия клавиши в цикле
+    printLevel(&snake); //Печатаем начальное значение уровня
+    printSpeed(&snake); //Печатаем начальное значение скорости
     while( key_pressed != STOP_GAME ) {
         key_pressed = getch(); // Считываем клавишу
         if(checkDirection(snake.direction, key_pressed)) //Проверка корректности смены направления
@@ -293,17 +323,18 @@ int main()
         goTail(&snake); //Рисуем хвост
         if(haveEat(&snake, food)) {
             addTail(&snake);
+            addLevel(&snake); //изменяем значение уровня
             printLevel(&snake);
         }
         refreshFood(food, SEED_NUMBER);// Обновляем еду
         repairSeed(food, SEED_NUMBER, &snake);
         blinkFood(food, SEED_NUMBER);
-        timeout(100); // Задержка при отрисовке
+        timeout(snake.speed_timeout); // Задержка при отрисовке
     }
     printExit(&snake);
     timeout(SPEED);
     getch();
     endwin(); // Завершаем режим curses mod
-    
+
     return 0;
 }
